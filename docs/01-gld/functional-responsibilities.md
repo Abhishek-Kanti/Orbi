@@ -1,11 +1,11 @@
 # Orbi — General Level Design (GLD): Functional Responsibilities
 
 - **Document ID**: `DOC-GLD-003`
-- **Revision**: `1.1` *(Updated with Discovery Sequence, Decision Fallback, Action-Bound Approvals, Layered Windows & Skill Sandbox)*
+- **Revision**: `1.2` *(Updated with Hybrid Memory Retrieval Pipeline & Pre-Fusion OpenFGA Boundaries)*
 - **Phase**: `01-GLD`
 - **Status**: `Draft - For Review`
-- **Last Updated**: `2026-11-14`
-- **Traceability**: Maps operational flows and negative constraints across `MOD-01`–`MOD-15` ([module-catalog.md](file:///f:/Projects/Orbi/docs/01-gld/module-catalog.md)), `AP-01`–`AP-10` ([vision.md](file:///f:/Projects/Orbi/docs/00-product/vision.md)), and ADRs ([docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md)).
+- **Last Updated**: `2026-11-16`
+- **Traceability**: Maps operational flows and negative constraints across `MOD-01`–`MOD-15` ([module-catalog.md](file:///f:/Projects/Orbi/docs/01-gld/module-catalog.md)), `AP-01`–`AP-10` ([vision.md](file:///f:/Projects/Orbi/docs/00-product/vision.md)), Memory HLD ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)), and ADRs ([docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md)).
 
 ---
 
@@ -27,7 +27,7 @@
 | Select authorized tool & emit `ToolCallIntent` | `X` | `X` | `C` | **O** | `C` | `C` | `X` | `X` | `C` | `C` | `X` | **A** |
 | Enforce Stage-2 OpenFGA & action-bound approval | `C` *(UI)* | `C` *(UI)* | **O** *(State)* | `X` | `C` | `C` | **E** | **O** *(Policy)* | `X` | `X` | `X` | **A** |
 | Inject secrets & dispatch to cloud/local harness | `X` | `X` | `X` | `X` | `X` | `C` | **O** | **E** | `X` | `C` *(Sandbox)* | **O** *(Exec)* | **A** |
-| Retrieve / quarantine / curate Cognee memory | `X` | `C` *(UI)* | `—` | `C` *(Read)* | `—` | `—` | `—` | **E** | **O** | `X` | `X` | **A** |
+| Retrieve / quarantine / curate memory & run hybrid retrieval | `X` | `C` *(UI)* | `—` | `C` *(Query/Read)* | `C` *(Optional)* | `—` | `—` | **E** *(Per-Branch)* | **O** *(Pipeline & Cognee Adapter)* | `X` | `X` | **A** |
 | Package, evaluate, approve & run Markdown skills | `X` | `C` *(Approve)* | `—` | `C` *(Instruct)* | `—` | `C` | **E** *(Script)* | **E** | `X` | **O** | `X` | **A** |
 | Layered Windows exec (Native/UIA/Vision) + confidence halt | `X` | `X` | `X` | `X` | `X` | `X` | `C` | **E** | `X` | `X` | **O** (`MOD-14`) | **A** |
 
@@ -176,11 +176,41 @@ sequenceDiagram
 
 ---
 
-### Flow 4: Memory Retrieval & Controlled Curation (`MOD-10`, `ADR-007`)
+### Flow 4: Hybrid Memory Retrieval, Pre-Fusion Authorization & Curation (`MOD-10`, `ADR-007`, `ADR-008`)
 
-1. **Scoped Read Path**: `MOD-04` queries `MOD-10` (**Memory Manager**). `MOD-10` enforces OpenFGA `user_id` + `household_id` ownership visibility before retrieving knowledge from Cognee's verified storage backends (`EVAL-03`), returning facts labeled with provenance (`user_explicit` vs. `untrusted_external`).
-2. **Quarantined Write Path**: Facts extracted from untrusted external channels (emails via `MOD-12`, web scrapes via `MOD-13`, screen text via `MOD-14`) carry `untrusted_external` provenance and cannot silently alter high-trust user preferences or system policies (`CON-07`).
-3. **Owner Curation**: Via `MOD-02` Dashboard, authorized users inspect, correct, promote, or delete memories inside `MOD-10`, with mutations audited in `MOD-15`.
+`[CONFIRMED]` / `[PROPOSED]` `MOD-10` owns and orchestrates the 5-stage Hybrid Retrieval Pipeline ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)), keeping **Cognee** strictly behind an internal adapter and enforcing **OpenFGA authorization inside every branch prior to fusion**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M04 as MOD-04 Agent Runtime
+    participant M10 as MOD-10 Memory Manager
+    participant QU as Query Understanding
+    participant BR as Parallel Branches: Vector / BM25 / Graph / Temporal
+    participant M09 as MOD-09 OpenFGA
+    participant FUS as Candidate Fusion - RRF Proposed
+    participant RR as Configurable Reranker - Proposed
+    participant M15 as MOD-15 Audit Ledger
+
+    M04->>M10: MemoryQueryRequest(query, user_id, household_id, context_budget)
+    M10->>QU: 1. Analyze intent, entities, keywords, temporal & graph utility (no mandatory LLM)
+    QU-->>M10: QueryPlan(activated_branches, constraints)
+    M10->>BR: 2. Dispatch ONLY activated branches in parallel (within branch timeout)
+    Note over BR,M09: Mandatory Per-Branch Pre-Fusion Authz (FR-MS-12)
+    BR->>M09: 3. Resource-level OpenFGA checks per candidate / node / edge inside EACH branch
+    M09-->>BR: Permitted subset ONLY (Unauthorized memories/edges dropped before exit)
+    BR-->>M10: Authorized Branch Ranked Lists (with branch provenance)
+    M10->>FUS: 4. Fuse authorized lists via RRF (proposed), deduplicate & merge provenance
+    FUS-->>M10: Fused Top-N Candidates (<= candidate_limit)
+    M10->>RR: 5. Rerank candidates against original query (or bypass if NoOp/simple)
+    RR-->>M10: Final Top-K Provenance-Tagged Context (<= final_context_limit)
+    M10->>M15: Record HYBRID_RETRIEVAL(plan, branch_counts, authz_dropped_count, reranker_used, latency)
+    M10-->>M04: Return Authorized Provenance-Tagged Memories
+```
+
+1. **Query Understanding Without Unnecessary LLMs**: `MOD-10` parses lexical phrases, temporal anchors ("last week", "current"), and entity triggers deterministically first (using `MOD-05` or lightweight rules), falling back to an LLM only for complex multi-clause queries (`FR-MS-08`).
+2. **Quarantined Write Path & Bi-Temporal Integrity (`CON-16`)**: Facts extracted from untrusted external inputs (emails via `MOD-12`, web scrapes via `MOD-13`, screen captures via `MOD-14`) are stored in `orbi_memory` + Cognee with `untrusted_external` provenance and cannot silently supersede high-trust user memories (`CON-07`).
+3. **Owner & Household Curation**: Via `MOD-02` Dashboard, authorized users inspect, promote, correct, or purge memories inside `MOD-10` (syncing PostgreSQL catalog and Cognee backends per `CON-14`), with mutations audited in `MOD-15`.
 
 ---
 
@@ -203,7 +233,7 @@ sequenceDiagram
 3. **Approvals Must NEVER Outlive Payload Mutations (`Decision 8`, `Clarification C`)**: `MOD-08` must never execute an approved intent if `user_id`, `task_id`, `tool_id`, canonical arguments, `target_resource`, `policy_version`, or `expires_at` fail validation.
 4. **Skills & Supporting Scripts (`MOD-11`) Must NEVER Run Unsandboxed or Grant Permissions (`Decision 7`, `Clarification D`)**: `SKILL.md` instructions never modify OpenFGA tuples; supporting scripts never execute inside `orbi-core` or hold raw API credentials (`CON-08`).
 5. **LangGraph (`MOD-04`) Must NEVER Own Task Lifecycle (`AP-03`)**: Task statuses, budgets, retries, and `AWAITING_APPROVAL` durability belong exclusively to `MOD-03` in PostgreSQL.
-6. **Memory Manager (`MOD-10`) Must NEVER Store Operational State or Secrets (`AP-04`)**: No task states, OpenFGA tuples, or OAuth tokens inside Cognee stores.
+6. **Memory Manager (`MOD-10`) Must NEVER Leak Unauthorized Candidates or Bypass Per-Branch OpenFGA (`AP-02`, `FR-MS-12`, `NFR-SEC-04`)**: Unauthorized memories, graph nodes, relationships, or metadata must never enter Candidate Fusion, Reranking, or LLM context; `MOD-10` must also never store operational task state, OpenFGA tuples, or OAuth secrets (`AP-04`).
 7. **Windows Companion (`MOD-14`) Must NEVER Guess Low-Confidence Actions or Open Inbound Listeners (`Decision 9`, `AP-05`)**: Insufficient confidence across UIA or Vision Fallback must trigger `STOP_INSUFFICIENT_CONFIDENCE`; all cloud communication must originate outbound over mTLS.
 8. **Audit Service (`MOD-15`) Must NEVER Mutate History or Persist Unredacted Secrets (`AP-07`)**.
 
@@ -219,3 +249,5 @@ sequenceDiagram
 | **Windows Native API & UIA fail and Vision confidence < threshold** | `MOD-14` Companion | Abort immediately (`STOP_INSUFFICIENT_CONFIDENCE`), perform zero clicks/keystrokes, report safe stop to `MOD-08`/`MOD-03` (`ADR-006`). |
 | **Skill supporting script attempts network/FS escape or times out** | `MOD-11-SANDBOX` | Sandbox runtime kills container/process immediately, returns `SANDBOX_VIOLATION_OR_TIMEOUT`, audits security alert (`MOD-15`). |
 | **Windows Companion offline or user hits local kill-switch** | `MOD-08` Relay / `MOD-14` | Return `COMPANION_OFFLINE` or `LOCAL_KILL_SWITCH_ACTIVE` cleanly; notify user via `MOD-01`/`MOD-02`. |
+| **One memory retrieval branch (e.g., Graph/Cognee) times out or errors** | `MOD-10` Memory Mgr | Degrade gracefully using remaining **authorized** branches (e.g., PostgreSQL BM25/Temporal), log `MEMORY_BRANCH_DEGRADED` in `MOD-15`; **never** bypass OpenFGA checks on degraded paths. |
+| **Memory Reranker (`MOD-10`) times out or is disabled** | `MOD-10` Memory Mgr | Fall back cleanly to pre-rerank RRF fused ordering capped at `final_context_limit`, recording `reranker_bypassed=true` in `MOD-15`. |

@@ -1,10 +1,10 @@
 # Orbi — Product Vision & Architectural Charter
 
 - **Document ID**: `DOC-PRD-001`
-- **Revision**: `1.1` *(Updated with GLD Review Decisions & Clarifications)*
+- **Revision**: `1.2` *(Updated with Hybrid Memory Retrieval Architecture)*
 - **Phase**: `00-Product`
 - **Status**: `Draft - For Review`
-- **Last Updated**: `2026-11-14`
+- **Last Updated**: `2026-11-16`
 
 ---
 
@@ -33,7 +33,7 @@ Throughout the Orbi engineering documentation suite, every decision, requirement
 
 1. **Intelligence proposes; deterministic systems dispose.** Reasoning agents (LangGraph via provider-independent LLM adapters) and a provider-independent Decision Service (with deterministic rules, LLM fallbacks, and optional Jev by TypeSafe `[EVALUATION REQUIRED]`) analyze intent, retrieve knowledge, and formulate tool-call intents from permission-filtered catalogs.
 2. **Governance enforces outside the model.** A deterministic Task Manager, an externalized Authorization Engine (OpenFGA), and a single Tool Execution Gateway enforce identity, two-stage permission checks, cryptographically action-bound human approval gates, secret injection, and audit logging entirely outside LLM prompt context.
-3. **State domains and execution environments are strictly partitioned.** Transactional task/application state (PostgreSQL), Memory Manager knowledge (Cognee, storage backends `[EVALUATION REQUIRED]`), and versioned Markdown-based skill packages (`SKILL.md` + sandboxed supporting scripts) are isolated into distinct lifecycles, while cloud execution and local Windows execution maintain strict operational boundaries.
+3. **State domains and execution environments are strictly partitioned.** Transactional task/application state (PostgreSQL), Memory Manager knowledge & hybrid retrieval orchestration (with Cognee isolated behind `MOD-10` and storage backends `[EVALUATION REQUIRED]`), and versioned Markdown-based skill packages (`SKILL.md` + sandboxed supporting scripts) are isolated into distinct lifecycles, while cloud execution and local Windows execution maintain strict operational boundaries.
 
 ---
 
@@ -87,9 +87,13 @@ A durable, PostgreSQL-backed Task Manager coordinated via Redis queues ensures e
 ### Pillar 3: Permission-Filtered Discovery & Zero-Trust Execution (`[CONFIRMED]`)
 Central **Agent** and **Tool Registries** catalog every identity and capability. Before reasoning starts, tool discovery filters the agent's catalog by agent, user, and instance OpenFGA permissions so agents only see authorized tools (`ADR-002`). All invocations route through the **Tool Execution Gateway**, which re-verifies **OpenFGA**, checks action-bound approvals, and injects secrets.
 
-### Pillar 4: Tri-Partite Knowledge & Markdown Skill Packages (`[CONFIRMED]` / `[EVALUATION REQUIRED]`)
+### Pillar 4: Tri-Partite Knowledge, Hybrid Memory Retrieval & Markdown Skill Packages (`[CONFIRMED]` / `[EVALUATION REQUIRED]`)
 - **Application State**: Relational operational truth in PostgreSQL.
-- **Memory Manager (`[CONFIRMED]` / `[EVALUATION REQUIRED]`)**: Storage-abstracted facade over **Cognee** (`EVAL-03` to verify actual supported backends), inspectable and editable in the Dashboard (`ADR-007`).
+- **Memory Manager & Hybrid Retrieval Orchestrator (`[CONFIRMED]` / `[EVALUATION REQUIRED]`)**: `MOD-10` is **not** a thin wrapper over Cognee's default retrieval API; it owns and orchestrates a configurable multi-stage hybrid retrieval pipeline (`ADR-008`, [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)):
+  - *Query Understanding*: Provider-independent extraction of intent, entities, keywords, temporal constraints, and graph utility to selectively activate retrieval branches without unnecessary LLM calls;
+  - *Parallel Retrieval Branches*: Vector semantic retrieval, BM25 keyword retrieval (`[PROPOSED]` / `[EVALUATION REQUIRED]`), Knowledge Graph entity/relationship retrieval, and selective Temporal/validity retrieval;
+  - *Pre-Fusion OpenFGA Enforcement*: Mandatory resource-level authorization enforced inside **every** retrieval branch before candidates leave their retrieval boundary (`private_user`, `shared_household`, custom scopes);
+  - *Candidate Fusion & Reranking*: Configurable deduplicating rank fusion (initial proposal: Reciprocal Rank Fusion / RRF, `[PROPOSED]` / `[EVALUATION REQUIRED]`) and replaceable, non-LLM-mandatory reranking (`[PROPOSED]` / `[EVALUATION REQUIRED]`), keeping Cognee abstracted behind `MOD-10` (`ADR-007`, `EVAL-03`, `EVAL-07`).
 - **Skill Lifecycle (`[CONFIRMED]`)**: Versioned **Markdown-based skill packages (`SKILL.md`)** containing optional examples, schemas, tests, and sandboxed supporting scripts—distinguishing instructions from executable code and prohibiting permission elevation or Gateway bypass (`ADR-005`).
 
 ### Pillar 5: Isolated Cloud Harnesses & Layered Windows Companion (`[CONFIRMED]` / `[EVALUATION REQUIRED]`)

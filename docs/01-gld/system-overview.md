@@ -1,11 +1,11 @@
 # Orbi — General Level Design (GLD): System Overview
 
 - **Document ID**: `DOC-GLD-001`
-- **Revision**: `1.1` *(Updated with GLD Review Decisions, Clarifications A–E & ADRs)*
+- **Revision**: `1.2` *(Updated with Hybrid Memory Retrieval Architecture & CON-13–16)*
 - **Phase**: `01-GLD`
 - **Status**: `Draft - For Review`
-- **Last Updated**: `2026-11-14`
-- **Traceability**: Realizes Product Vision ([vision.md](file:///f:/Projects/Orbi/docs/00-product/vision.md)), Requirements ([requirements.md](file:///f:/Projects/Orbi/docs/00-product/requirements.md)), and ADRs ([docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md)).
+- **Last Updated**: `2026-11-16`
+- **Traceability**: Realizes Product Vision ([vision.md](file:///f:/Projects/Orbi/docs/00-product/vision.md)), Requirements ([requirements.md](file:///f:/Projects/Orbi/docs/00-product/requirements.md)), ADRs ([docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md)), and Memory HLD ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)).
 
 ---
 
@@ -39,7 +39,7 @@ flowchart TB
             MOD06["MOD-06: Central Agent Registry"]
             MOD07["MOD-07: Central Tool Registry"]
             MOD08["MOD-08: Tool Execution Gateway"]
-            MOD10["MOD-10: Memory Manager Facade - Cognee"]
+            MOD10["MOD-10: Memory Manager & Hybrid Retrieval Orchestrator"]
             MOD11["MOD-11: Skill Lifecycle Manager - SKILL.md"]
             MOD12["MOD-12: Stateless SaaS API Connectors"]
             MOD15["MOD-15: Audit & Provenance Service"]
@@ -50,9 +50,9 @@ flowchart TB
             MOD09["MOD-09: OpenFGA Authorization Container"]
             MOD13["MOD-13: Cloud Browser Container - Playwright"]
             MOD11_SB["MOD-11-SANDBOX: Isolated Skill Script Sandbox - EVAL-06"]
-            PG["orbi-postgres: Isolated Schemas for App / OpenFGA"]
+            PG["orbi-postgres: App, OpenFGA & Memory Catalog / Search Eval"]
             REDIS["orbi-redis: Queues, Locks & Events"]
-            MEM_STORE["Cognee Verified Storage Backends - EVAL-03"]
+            MEM_STORE["Cognee Adapter & Verified Backends - EVAL-03"]
             EXT_JEV["Optional External Jev Provider - EVAL-01"]
             MOD16["MOD-16-EXT: Future Home Assistant / MQTT Boundary - AP-10"]
         end
@@ -94,7 +94,11 @@ flowchart TB
     MOD08 -. "Future Home IoT" .-> MOD16
 
     MOD09 <--> PG
+    MOD10 <--> PG
+    MOD10 <--> MOD09
+    MOD10 --> MOD05
     MOD10 <--> MEM_STORE
+    MOD10 --> MOD15
     MOD11 --> MOD07
     MOD11 --> MOD11_SB
 
@@ -148,7 +152,7 @@ At resume/execution time, `MOD-08` recomputes this binding. **Any change** to ar
 - **`MOD-03` vs. `MOD-04`**: `MOD-03` (PostgreSQL + Redis) owns task lifecycle, retries, budgets, and action-bound approvals; LangGraph (`MOD-04`) owns only ephemeral turn-scoped reasoning state.
 - **App State vs. Memory vs. Skills (`AP-04`)**:
   - **PostgreSQL (`orbi_app`)**: Authoritative operational state, registries, approval bindings, audit ledger.
-  - **Memory Manager (`MOD-10` over Cognee, `ADR-007`)**: Associative knowledge memory behind an abstract facade; actual storage backends verified in `EVAL-03` before HLD.
+  - **Memory Manager (`MOD-10` over Cognee + Memory Catalog, `ADR-007`, `ADR-008`)**: Owns and orchestrates the 5-stage hybrid memory retrieval pipeline (`Query Understanding -> Parallel Branches -> Per-Branch OpenFGA Authz -> Candidate Fusion -> Reranking`), keeping Cognee abstracted behind an internal adapter; actual Cognee storage backends and PostgreSQL FTS/BM25 fit verified in `EVAL-03`/`EVAL-07`.
   - **Skill Lifecycle Manager (`MOD-11`, `ADR-005`)**: Versioned **Markdown-based skill packages (`SKILL.md`)** distinguishing declarative planning instructions from optional sandboxed supporting scripts (`MOD-11-SANDBOX`), evaluated and human-approved prior to production publication.
 
 ### 3.6 Layered Windows Companion Execution (`Decision 9`, `ADR-006`)
@@ -159,9 +163,16 @@ At resume/execution time, `MOD-08` recomputes this binding. **Any change** to ar
 
 Across **all three layers**, `MOD-14` must stop safely (`STOP_INSUFFICIENT_CONFIDENCE`) when confidence is insufficient, enforce local app/window policies, and obey cloud OpenFGA + action-bound approvals for sensitive actions.
 
+### 3.7 Hybrid Memory Retrieval & Pre-Fusion Authorization Invariant (`ADR-008`)
+`[CONFIRMED]` / `[PROPOSED]` `MOD-10` (**Memory Manager**) is **not** a thin wrapper over Cognee's default retrieval API; it owns and orchestrates a 5-stage configurable retrieval pipeline ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)):
+1. **Provider-Independent Query Understanding**: Extracts intent, entities, exact keywords, temporal constraints, and graph applicability to activate only relevant branches without mandatory LLM calls for simple queries.
+2. **Parallel Multi-Strategy Retrieval**: Runs configured branches (`Vector semantic`, `BM25 keyword` `[PROPOSED]`, `Knowledge Graph`, and selective `Temporal`). PostgreSQL-native search is evaluated (`EVAL-07`) before introducing any additional search engine (`AP-09`).
+3. **Mandatory Per-Branch Pre-Fusion OpenFGA Enforcement**: Every retrieval branch enforces resource-level OpenFGA authorization (`private_user`, `shared_household`, custom scopes) **before** candidates enter fusion, reranking, or LLM context. Discovery of an entity never implies read permission.
+4. **Configurable Candidate Fusion & Reranking (`[PROPOSED]` / `[EVALUATION REQUIRED]`)**: Deduplicates and merges incompatible branch scales via Reciprocal Rank Fusion (`RRF`), then optionally reorders top candidates via a replaceable, non-LLM-mandatory reranker while preserving full branch provenance.
+
 ---
 
-## 4. Architectural Conflicts & Tensions Register (`CON-01` – `CON-12`)
+## 4. Architectural Conflicts & Tensions Register (`CON-01` – `CON-22`)
 
 ### Previously Identified Conflicts (`CON-01` – `CON-07`, Updated)
 
@@ -184,3 +195,23 @@ Across **all three layers**, `MOD-14` must stop safely (`STOP_INSUFFICIENT_CONFI
 | **`CON-10`** | **Immutable Action-Bound Approvals (`Decision 8`) vs. Volatile Execution Tokens (`snapshot_id`, OAuth nonces)** | Binding approval hashes to *all* raw arguments means that if a browser/desktop `snapshot_id` or pagination cursor refreshes during a 5-minute approval pause, a strict byte-for-byte hash check would break valid resumable actions; conversely, allowing mutable target arguments violates `Decision 8`. **Mitigation (`ADR-004`)**: Tool schemas in `MOD-07` separate **immutable semantic action fields** (recipient, subject, file path, target control semantics, payload) included in the `canonical_arguments_hash` from non-semantic ephemeral session tokens validated separately via state freshness checks (`CON-05`). *Exact split specified in HLD/LLD.* |
 | **`CON-11`** | **Pre-Reasoning Discovery Filtering (`Clarification A`) vs. Instance-Specific Resource Permissions in `MOD-09`** | During Step 4 of discovery, the Runtime may know the user and agent (`agent:email`, `user:owner`) before knowing which specific target resource (`email:123` or `device:living_room_lock`) the LLM will choose in Step 6. **Mitigation (`ADR-002`)**: Discovery uses OpenFGA Stage-1 capability checks (`can_invoke_tool_type` / authorized instance list for that user+agent), while Stage-2 Gateway execution performs exact resource-level OpenFGA `Check(subject, relation, specific_resource)` once arguments are populated. |
 | **`CON-12`** | **Multi-Provider Confidence Calibration Drift (`Decision 3`: Jev vs. Deterministic Rules vs. LLM Fallbacks)** | Jev is trained with RLCD for calibrated probabilities (`0.0–1.0`), whereas deterministic heuristics are boolean/ordinal and fallback LLMs are notoriously poorly calibrated when outputting self-assessed confidence scores. Using a single static confidence threshold across providers would yield erratic fallback/escalation behavior. **Mitigation (`ADR-003`)**: `MOD-05` tracks provider identity in every `DecisionResult` and applies **per-provider threshold policies** (e.g., strict deterministic rules bypass probability thresholds; LLM fallbacks default to conservative escalation on ambiguity). |
+
+### Newly Identified Conflicts from Hybrid Memory Retrieval Architecture (`CON-13` – `CON-16`)
+
+| ID | Newly Identified Conflict | Analysis & Proposed Mitigation |
+| :--- | :--- | :--- |
+| **`CON-13`** | **Multi-Hop Graph Traversal vs. Per-Branch Pre-Fusion OpenFGA Enforcement (`FR-MS-12`)** | Knowledge graph retrieval frequently walks intermediate entities and edges (e.g., `User A -> Shared Household -> Private Event B`). If graph queries traverse or return unauthorized intermediate/terminal nodes or relationship labels prior to authorization filtering, private data leaks into fusion or prompt context. **Mitigation (`ADR-008`)**: Enforce strict OpenFGA resource checks on **every** returned node, edge, and triplet inside `GraphBranch` *before* results exit the branch; disallow unverified multi-hop path projections across unauthorized nodes. |
+| **`CON-14`** | **Dual-Store Consistency (PostgreSQL Memory Catalog vs. Cognee Vector/Graph Stores)** | Because Cognee may not natively supply BM25 or bi-temporal validity filtering (`EVAL-03`), `MOD-10` maintains an authoritative `MemoryUnit` catalog/index in PostgreSQL (`orbi_memory`) alongside Cognee's vector/graph indexes. Partial write failures or deletes can leave orphaned vectors/edges or stale ACL tuples. **Mitigation ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md))**: PostgreSQL `orbi_memory` is the canonical source of truth for identity, ACL scope, and temporal validity; outbox/reconciliation jobs synchronize Cognee ingestions/deletions, and every retrieval branch validates canonical `memory_unit_id` existence and OpenFGA permission at read time. |
+| **`CON-15`** | **Parallel 4-Branch Retrieval & Cross-Encoder Reranking Compute vs. Single OCI VM Limits (`AP-09`, `EVAL-05`)** | Executing up to four parallel retrieval branches plus loading a local neural cross-encoder reranker inside `orbi-core` competes for RAM/CPU on a single OCI VM alongside Playwright, OpenFGA, and PostgreSQL. **Mitigation (`EVAL-07`, `OQ-13`)**: Keep `QueryUnderstanding` selective (avoiding unnecessary temporal/graph runs), support `NoOpReranker` / external API reranker / lightweight local reranker behind `RerankerPort`, and benchmark CPU/RAM overhead in `EVAL-05` and `EVAL-07`. |
+| **`CON-16`** | **Bi-Temporal Fact Supersession vs. Untrusted Source Overwrites (`CON-07`, `OQ-14`)** | Temporal retrieval tracks changing facts over time (`valid_from`, `valid_to`, `superseded_by`), yet untrusted external sources (e.g., an incoming promotional/phishing email) must not automatically invalidate or supersede high-trust user memories. **Mitigation (`ADR-008`)**: Separate trust tier from temporal validity—only `user_explicit` or owner-curated updates may close `valid_to` (`superseded_by`) on existing high-trust memories; `untrusted_external` temporal assertions remain quarantined/scoped unless verified. |
+
+### Reconciled Cross-Document HLD Conflicts (`CON-17` – `CON-22`, See [system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md))
+
+| ID | Discovered Conflict / Tension | Reconciliation & Mitigation Strategy |
+| :--- | :--- | :--- |
+| **`CON-17`** | **Initial `MARKDOWN_ONLY` Skills (`Phase 4`) vs. Supporting Script Sandboxing (`ADR-005`, `EVAL-06`)** | Launching Phase 4 skills with arbitrary code execution before `MOD-11-SANDBOX` (`EVAL-06`, `OQ-11`) is hardened increases host compromise risk. **Reconciliation**: Enforce `package_mode = MARKDOWN_ONLY` initially (declarative `SKILL.md` + JSON schemas over existing `MOD-07` tools) and explicitly reject script execution until `EVAL-06` validates `MOD-11-SANDBOX`. |
+| **`CON-18`** | **Scoped `langgraph_checkpoints` Schema vs. `AP-03` Separate Task Manager** | Adding a `langgraph_checkpoints` PostgreSQL schema could tempt developers to treat LangGraph checkpoints as authoritative workflow state. **Reconciliation**: Strictly subordinate `langgraph_checkpoints` to `orbi_app.tasks` for intra-turn resumption only, purge checkpoints upon task termination, and validate turn handoffs in `EVAL-04`. |
+| **`CON-19`** | **Third-Party MCP Servers vs. `AP-01` Gateway Exclusivity & `AP-02` Externalized Authz** | Direct LangGraph MCP clients would let agents call external servers without `MOD-07` schemas, `MOD-08` auditing, or `MOD-09` OpenFGA checks. **Reconciliation**: Host all MCP Client Adapters strictly behind `MOD-08`, requiring explicit `MOD-07` tool import, schema pinning, and sensitivity classification before agent exposure. |
+| **`CON-20`** | **Playwright Human Takeover (`MOD-13` OTP/CAPTCHA) vs. `AP-05`/`AP-06` Isolation & Approval Integrity** | Allowing manual user takeover over a cloud browser session risks exposing persistent cookies/sessions or unverified actions. **Reconciliation**: Orbi never automates CAPTCHA bypassing; `MOD-13` suspends cleanly via `MOD-03` (`AWAITING_HUMAN_TAKEOVER`), exposes an OpenFGA-gated ephemeral noVNC/OTP channel inside `MOD-02`, and enforces fresh action-bound approvals (`ADR-004`) on sensitive DOM submits. |
+| **`CON-21`** | **Four-Plane HLD Logical Grouping vs. Three-Zone Physical Isolation (`ADR-001`)** | Grouping modules into 4 HLD planes (*Control*, *Trusted Data & Policy*, *Isolated Execution*, *Local Execution*) could appear inconsistent with the 3 physical isolation zones if unmapped. **Reconciliation**: [system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md) §A.2 maps every module 1-to-1 across both views without altering ownership. |
+| **`CON-22`** | **Object/Artifact Storage (`MOD-10`/`11`/`13`) vs. `AP-09` Minimal Infrastructure** | Playwright traces, ingested documents, and versioned skill artifacts require blob storage, but adding MinIO/S3 containers violates `AP-09` on a single OCI VM. **Reconciliation**: Abstract behind `BlobStoragePort` using an encrypted local OCI Docker volume initially, with optional OCI Object Storage bucket migration later. |

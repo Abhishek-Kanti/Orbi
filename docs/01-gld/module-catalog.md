@@ -1,11 +1,11 @@
 # Orbi — General Level Design (GLD): Module Catalog
 
 - **Document ID**: `DOC-GLD-002`
-- **Revision**: `1.1` *(Updated with GLD Review Decisions, Clarifications A–E & ADRs)*
+- **Revision**: `1.2` *(Updated with Hybrid Memory Retrieval Architecture)*
 - **Phase**: `01-GLD`
 - **Status**: `Draft - For Review`
-- **Last Updated**: `2026-11-14`
-- **Traceability**: Defines modules referenced in [requirements.md](file:///f:/Projects/Orbi/docs/00-product/requirements.md), [system-overview.md](file:///f:/Projects/Orbi/docs/01-gld/system-overview.md), and [docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md).
+- **Last Updated**: `2026-11-16`
+- **Traceability**: Defines modules referenced in [requirements.md](file:///f:/Projects/Orbi/docs/00-product/requirements.md), [system-overview.md](file:///f:/Projects/Orbi/docs/01-gld/system-overview.md), [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md), and [docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md).
 
 ---
 
@@ -22,7 +22,7 @@
 | **`MOD-07`** | Central Tool Registry | Zone 1 (`orbi-core` OCI) | PostgreSQL (`orbi_app`) + JSON Schema | `[CONFIRMED]` | `AP-01`, `AP-06`, `ADR-002` |
 | **`MOD-08`** | Tool Execution Gateway | Zone 1 (`orbi-core` OCI) | Python Gateway Service | `[CONFIRMED]` | `AP-01`, `AP-02`, `ADR-004` |
 | **`MOD-09`** | Authorization & Policy Engine | Zone 2b (`orbi-openfga` Container) | OpenFGA (Household-Ready Model) | `[CONFIRMED]` | `AP-02`, `AP-10`, `ADR-002` |
-| **`MOD-10`** | Memory Manager Service | Zone 1 (`orbi-core` Facade) + Zone 2b Backends | Cognee *(Backends `[EVALUATION REQUIRED]`)* | `[CONFIRMED]` *(Backends: `EVAL-03`)* | `AP-04`, `AP-09`, `ADR-007` |
+| **`MOD-10`** | Memory Manager & Hybrid Retrieval Orchestrator | Zone 1 (`orbi-core` Orchestrator) + Zone 2b (`orbi-postgres` & Cognee Backends) | Memory Manager + Cognee Adapter + PG Search (`EVAL-03`/`07`) | `[CONFIRMED]` *(BM25/RRF/Rerank: `[PROPOSED - EVAL]`)* | `AP-02`, `AP-04`, `AP-09`, `ADR-007`, `ADR-008` |
 | **`MOD-11`** | Skill Lifecycle Manager (`SKILL.md`) | Zone 1 (`orbi-core`) + **`MOD-11-SANDBOX`** (Zone 2a) | Versioned Markdown Packages + Sandbox (`EVAL-06`) | `[CONFIRMED]` *(Sandbox: `EVAL-06`)* | `AP-04`, `AP-06`, `ADR-005` |
 | **`MOD-12`** | External API Integration Connectors | Zone 1 (`orbi-core` OCI, Gateway-Mediated) | Gmail, Spotify, SaaS Adapters | `[CONFIRMED]` | `AP-01`, `AP-10` |
 | **`MOD-13`** | Cloud Browser Harness | Zone 2a (`orbi-browser` Container) | Playwright + Chromium | `[CONFIRMED]` | `AP-01`, `AP-05`, `ADR-001` |
@@ -126,14 +126,21 @@
 - **Public Interfaces**: `filter_authorized_tools(user, agent, instance, candidate_tools)`, `check(subject, relation, object)`, tuple write/read APIs (admin-gated via `MOD-02`/`MOD-11`).
 - **Independent Testability (`AP-08`)**: Standalone `.fga.yaml` model assertion suites covering single-owner, future multi-member household isolation, cross-agent boundaries, and policy version invalidation.
 
-### `MOD-10`: Memory Manager Service (Over Cognee)
-- **Purpose**: Provider/storage-abstracted Memory Manager (`ADR-007`) encapsulating **Cognee** to extract, index, retrieve, quarantine, and curate long-term user/household knowledge (`AP-04`). Shields `orbi-core` from Cognee's internal storage topology while `EVAL-03` verifies officially supported storage backends.
-- **Status**: `[CONFIRMED]` Architecture / `[EVALUATION REQUIRED]` Backends (`EVAL-03`).
-- **Owned State**: Isolated Cognee relational/vector/graph storage backends (`EVAL-03`), strictly isolated from `orbi_app` transactional tables (`AP-04`).
-- **Public Interfaces**: `retrieve_scoped_memory(query, user_id, household_id)`, `propose_memory_commit(content, provenance)`, `inspect_and_curate_memory()` (via `MOD-02`).
-- **Allowed Dependencies**: Verified Cognee storage backends (`EVAL-03`), `MOD-09` (ownership/household scope check), `MOD-15`.
-- **Forbidden Dependencies**: Never stores task statuses, OAuth credentials, OpenFGA tuples, or executable skill code (`AP-04`).
-- **Independent Testability (`AP-08`)**: Tested via fixture ingestion/retrieval contracts, household scope isolation checks, and provenance quarantine tests.
+### `MOD-10`: Memory Manager & Hybrid Retrieval Orchestrator (Over Cognee + PG Memory Catalog)
+- **Purpose**: Authoritative memory domain owner (`ADR-007`, `ADR-008`)—explicitly **not** a thin wrapper around Cognee's default retrieval API. Owns and orchestrates the configurable **5-stage Hybrid Retrieval Pipeline** ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)), canonical memory lifecycle, provenance quarantine, and curation while isolating **Cognee** behind an internal adapter boundary (`EVAL-03`, `EVAL-07`).
+- **Status**: `[CONFIRMED]` Orchestrator & Per-Branch Authz / `[PROPOSED - EVALUATION REQUIRED]` BM25, RRF, Reranking & Cognee/PG Backends (`EVAL-03`, `EVAL-07`).
+- **Owned Internal Sub-Components (`orbi-core` Zone 1)**:
+  1. **`QueryUnderstandingEngine`**: Provider-independent analyzer extracting query intent, key entities, exact terms, temporal constraints, and graph utility to selectively activate branches without mandatory LLM calls.
+  2. **`BranchOrchestrator` & 4 Retrieval Adapters**: Executes independently configurable branches in parallel where appropriate: `VectorBranch`, `BM25Branch` (`[PROPOSED]`), `GraphBranch`, and selective `TemporalBranch`. Evaluates PostgreSQL-native search before introducing any separate search engine (`AP-09`).
+  3. **`BranchAuthzFilter`**: Enforces resource-level OpenFGA (`MOD-09`) authorization inside **every** branch (`private_user`, `shared_household`, custom scopes) *before* candidates exit their retrieval boundary (`FR-MS-12`).
+  4. **`CandidateFusionEngine`**: Merges incompatible branch score scales via a configurable `FusionStrategyPort` (initial proposal: Reciprocal Rank Fusion / `RRF`, `[EVALUATION REQUIRED]`), performs canonical deduplication, and preserves full branch/source provenance.
+  5. **`RerankingEngine`**: Replaceable `RerankerPort` (`[PROPOSED - EVALUATION REQUIRED]`) re-scoring top fused candidates (`candidate_limit` -> `final_context_limit`) without requiring expensive LLM calls on every query.
+  6. **`CogneeAdapter` & `PostgresMemoryCatalog`**: Separates Cognee vector/graph operations from PostgreSQL-backed canonical metadata, bi-temporal validity (`event_time`, `valid_from`, `valid_to`, `superseded_by`), and lexical search evaluation (`CON-14`).
+- **Owned State**: Canonical `MemoryUnit` catalog, provenance/trust tags, and bi-temporal records (`orbi_memory` schema in `orbi-postgres`, separate from `orbi_app` transactional tables per `AP-04`), plus Cognee's verified vector/graph storage backends (`EVAL-03`).
+- **Public Interfaces**: `retrieve_hybrid_memory(MemoryQueryRequest)`, `propose_memory_commit(content, provenance, validity)`, `inspect_and_curate_memory()` (via `MOD-02`), `run_retrieval_eval_suite()` (`EVAL-07`).
+- **Allowed Dependencies**: `MOD-05` (optional query classification), `MOD-09` (mandatory per-branch OpenFGA checks), `MOD-15` (retrieval & mutation audit), verified Cognee backends, PostgreSQL `orbi_memory`.
+- **Forbidden Dependencies**: Never leaks unauthorized entities/edges/metadata into Fusion, Reranking, or `MOD-04`; never stores task state, OpenFGA tuples, OAuth secrets, or executable skill code (`AP-04`).
+- **Independent Testability (`AP-08`)**: Stage-by-stage contract tests (Query Understanding -> Mocked Branches -> OpenFGA Leakage Tests -> RRF Deduplication -> Reranker A/B) plus the formal `EVAL-07` benchmark (`Recall@K`, `Precision@K`, `MRR`, `NDCG@K`, latency, leakage).
 
 ### `MOD-11`: Skill Lifecycle Manager (`SKILL.md`) & Script Sandbox (`MOD-11-SANDBOX`)
 - **Purpose**: Manages reusable capabilities packaged as **versioned Markdown skill packages (`SKILL.md` + optional schemas, examples, tests, and supporting scripts)** (`ADR-005`, `Clarification D`). Enforces clear separation between declarative instructions (loaded into agent context) and supporting scripts (executed solely inside **`MOD-11-SANDBOX`**, Zone 2a).
