@@ -15,13 +15,14 @@
 | **[ADR-004](file:///f:/Projects/Orbi/docs/04-adr/ADR-004-cryptographic-action-bound-approvals.md)** | Cryptographic Action-Bound Approval Integrity | **Accepted** | `EVAL-04` *(Task/LangGraph Handoff)*, `OQ-08` *(Matrix/TTLs)* | Decision 8; Clarification C; `AP-03`, `AP-06`, `AP-07` |
 | **[ADR-005](file:///f:/Projects/Orbi/docs/04-adr/ADR-005-markdown-skill-packages-and-script-sandboxing.md)** | Versioned Markdown Skill Packages & Supporting Script Sandboxing | **Accepted** *(Sandbox Runtime Pending Eval)* | `EVAL-06` / `OQ-11` *(Sandbox Tech)* | Decision 7; Clarification D; `AP-01`, `AP-04`, `AP-06` |
 | **[ADR-006](file:///f:/Projects/Orbi/docs/04-adr/ADR-006-layered-windows-companion-execution.md)** | Layered Windows Companion Execution & Home IoT Boundary | **Accepted** *(UIA/Vision Thresholds Pending Eval)* | `EVAL-02` *(UIA/Vision Spike)*, `OQ-12` | Decisions 9, 10; `AP-05`, `AP-06`, `AP-10` |
-| **[ADR-007](file:///f:/Projects/Orbi/docs/04-adr/ADR-007-memory-manager-abstraction-over-cognee.md)** | Memory Manager Facade Encapsulating Cognee | **Accepted** *(Capabilities & Backends Pending Eval)* | `EVAL-03` / `OQ-06` *(6-Dim Audit & Backends)* | Decision 6; `AP-04`, `AP-09` |
+| **[ADR-007](file:///f:/Projects/Orbi/docs/04-adr/ADR-007-memory-manager-abstraction-over-cognee.md)** | `MOD-10: Memory Manager` Ownership & Replaceable `CogneeAdapter` Boundary | **Accepted** *(Capabilities & Backends Pending Eval)* | `EVAL-03` / `OQ-06` *(6-Dim Audit & Backends)* | Decision 6; `AP-04`, `AP-09` |
 | **[ADR-008](file:///f:/Projects/Orbi/docs/04-adr/ADR-008-hybrid-memory-retrieval-architecture.md)** | Hybrid Memory Retrieval Architecture & Per-Branch OpenFGA Authorization | **Accepted** *(BM25, RRF & Reranker Pending Eval)* | `EVAL-03`, `EVAL-07`, `OQ-06`, `OQ-13`, `OQ-14` | Hybrid Retrieval Mandate; `FR-MS-08`–`13`; `AP-02`, `AP-04`, `AP-09` |
+| **[ADR-009](file:///f:/Projects/Orbi/docs/04-adr/ADR-009-autonomous-agent-automation-platform.md)** | Autonomous Agent-Driven Automation Platform & Non-Inherited Delegation | **Accepted** *(Quotas, Condition DSL & Phabric Packaging Pending Eval)* | `EVAL-05`, `EVAL-08`, `OQ-15`–`OQ-17` | Autonomous Automation Clarification; `FR-AT-01`–`10`; `AP-01`–`10` |
 
 ---
 
 ## Status Definitions
 
 - **Accepted**: Architectural decision confirmed by the project owner and locked for HLD/LLD.
-- **Accepted *(Pending Eval)***: Architectural pattern is confirmed, while specific vendor inclusion or sizing parameters remain explicitly gated on empirical spike verification (`EVAL-01`–`EVAL-06`) before finalizing HLD.
+- **Accepted *(Pending Eval)***: Architectural pattern is confirmed, while specific vendor inclusion or sizing parameters remain explicitly gated on empirical spike verification (`EVAL-01`–`EVAL-08`) before finalizing HLD.
 - **Superseded**: Replaced by a later ADR.

@@ -14,9 +14,9 @@ Orbi starts as a single-owner personal assistant (`ASM-01`), yet future househol
 
 ## Decision
 
-1. **Household-Ready Identity & Ownership Model**:
-   - All identity, task, memory, device, and authorization models distinguish `user:<id>`, `household:<id>`, `owner` relation, `agent:<id>`, `instance:<id>`, and `resource:<id>` in PostgreSQL and OpenFGA (`MOD-09`).
-   - Initial deployment creates one primary owner and default household/instance scope; future household members require only new user records and OpenFGA tuples—no structural redesign.
+1. **Tenant-Generalized Household-Ready Identity & Ownership Model (`ADR-009` Alignment)**:
+   - Identity, task, memory, automation, device, and authorization models generalize group ownership via **`tenant:<id>` (`tenant_type: PERSONAL | HOUSEHOLD | ORGANIZATION_FUTURE`)**, **`owner_principal`** (`user:<id>`), `creator_principal`, `agent:<id>`, `instance:<id>`, and `resource:<id>` in PostgreSQL and OpenFGA (`MOD-09`).
+   - Household sharing is modeled as `tenant_type = HOUSEHOLD` rather than a special-case table, leaving clean room for future organizational tenants without building org features now; future household members require only user records and OpenFGA tuples—no structural redesign.
 2. **Mandatory 7-Step Agent & Tool Discovery Sequence (`Clarification A`)**:
    - Step 1: Manager selects specialized agent via `MOD-06` (Central Agent Registry).
    - Step 2: `MOD-04` (Agent Runtime) initializes the selected agent.

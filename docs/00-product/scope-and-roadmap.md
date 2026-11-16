@@ -1,7 +1,7 @@
 # Orbi — Scope, Evaluation Spikes & Delivery Roadmap
 
 - **Document ID**: `DOC-PRD-003`
-- **Revision**: `1.2` *(Updated with Hybrid Memory Retrieval Architecture & Evaluation Plan)*
+- **Revision**: `1.3` *(Updated with Autonomous Automation Platform `MOD-17`, Result & Delivery `MOD-18` & `EVAL-08`)*
 - **Phase**: `00-Product`
 - **Status**: `Draft - For Review`
 - **Last Updated**: `2026-11-16`
@@ -14,20 +14,20 @@
 
 ```
 [Phase 0: Product & GLD + Initial ADRs]  ──▶  [Phase 1: Spike Evals]  ──▶  [Phase 2: HLD]  ──▶  [Phase 3: LLD]  ──▶  [Implementation]
-        (Current Milestone)                      (EVAL-01..07)            (docs/02-hld/)       (docs/03-lld/)
+        (Current Milestone)                      (EVAL-01..08)            (docs/02-hld/)       (docs/03-lld/)
 ```
 
 | Folder | Target Artifacts | Gate Criterion |
 | :--- | :--- | :--- |
-| `docs/00-product/` | `vision.md`, `requirements.md`, `scope-and-roadmap.md` *(Rev 1.2)* | Owner alignment on Decisions 1–10, Clarifications A–E, Hybrid Memory Retrieval requirements (`FR-MS-08`–`13`), and open HLD questions (`OQ-01`, `OQ-04`–`06`, `OQ-08`, `OQ-11`–`14`). |
-| `docs/01-gld/` | `system-overview.md`, `module-catalog.md`, `functional-responsibilities.md` *(Rev 1.2)* | Sign-off on 3-zone resource isolation, 7-step discovery flow, hybrid retrieval boundaries, action-bound approvals, and `CON-01`–`CON-22` resolutions. |
-| `docs/04-adr/` | `README.md`, `ADR-001` through `ADR-008` *(Baseline + Hybrid Memory ADR)* | Formal capture of confirmed architectural trade-offs and evaluation prerequisites. |
-| `docs/02-hld/` | [README.md](file:///f:/Projects/Orbi/docs/02-hld/README.md), [system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md) *(Drafted)*, [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md) *(Drafted)* | Verified end-to-end data flows, trust boundaries, Dashboard stack (`OQ-01`), sensitivity matrix (`OQ-08`), and spike outputs (`EVAL-01`–`07`). |
-| `docs/03-lld/` | PostgreSQL DDL, Redis queue contracts, Tool/Agent Registry schemas, `SKILL.md` package spec, Task FSM, Gateway & Harness APIs | Implementation-ready specifications enabling modular, test-driven coding. |
+| `docs/00-product/` | `vision.md`, `requirements.md`, `scope-and-roadmap.md` *(Rev 1.3)* | Owner alignment on Decisions 1–10, Hybrid Memory (`FR-MS-08`–`13`), Autonomous Agent Automation (`FR-AT-01`–`10`), and open HLD questions (`OQ-01`, `OQ-04`–`06`, `OQ-08`, `OQ-11`–`17`). |
+| `docs/01-gld/` | `system-overview.md`, `module-catalog.md`, `functional-responsibilities.md` *(Rev 1.3)* | Sign-off on 3-zone resource isolation, 7-step discovery flow, hybrid retrieval boundaries, 5-way automation/delivery separation (`MOD-17`/`MOD-18`), non-inherited delegation, action-bound approvals, and `CON-01`–`CON-26` resolutions. |
+| `docs/04-adr/` | `README.md`, `ADR-001` through `ADR-009` | Formal capture of confirmed architectural trade-offs and evaluation prerequisites. |
+| `docs/02-hld/` | [README.md](file:///f:/Projects/Orbi/docs/02-hld/README.md), [system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md) *(Drafted)*, [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md) *(Drafted)* | Verified end-to-end data flows, trust boundaries, Dashboard stack (`OQ-01`), sensitivity matrix (`OQ-08`), automation quotas/condition DSL (`OQ-15`–`17`), and spike outputs (`EVAL-01`–`08`). |
+| `docs/03-lld/` | PostgreSQL DDL (`orbi_app`, `orbi_memory`, `orbi_automation`), Redis queue contracts, Tool/Agent Registry schemas, `SKILL.md` package spec, Task FSM, Gateway & Harness APIs | Implementation-ready specifications enabling modular, test-driven coding. |
 
 ---
 
-## 2. Mandatory Technology Evaluation Spikes (`EVAL-01` – `EVAL-07`)
+## 2. Mandatory Technology Evaluation Spikes (`EVAL-01` – `EVAL-08`)
 
 `[CONFIRMED]` / `[EVALUATION REQUIRED]` Unverified technology assumptions must **not** be treated as confirmed until small, time-boxed validation spikes verify them against Orbi's architectural principles (`AP-01`–`AP-10`):
 
@@ -53,10 +53,10 @@
 - **Why Evaluation Is Required**: Minimal infrastructure is preferred (`AP-09`), **but we must empirically verify what the target Cognee version and storage backends actually support** before finalizing HLD (`OQ-06`):
   1. **Vector retrieval**: Supported vector backends (`pgvector` vs. Qdrant/LanceDB) and recall/filtering accuracy.
   2. **Graph retrieval**: Supported graph backends (embedded Kuzu/NetworkX vs. Neo4j), multi-hop traversal APIs, and edge metadata exposure.
-  3. **Keyword/BM25 retrieval**: Whether Cognee natively offers true BM25 lexical scoring or lacks it (requiring `MOD-10` PostgreSQL FTS/BM25 adapter).
-  4. **Filtering and authorization**: Whether metadata filters can push down securely or require per-item post-filtering via `MOD-09` OpenFGA inside `MOD-10`.
-  5. **Metadata and provenance**: Survival of `memory_unit_id`, `owner_id`, `household_id`, `source_provenance`, and `trust_tier` across Cognee ECL ingestion.
-  6. **Temporal retrieval**: Native support vs. missing bi-temporal (`event_time`, `valid_from`, `valid_to`, `superseded_by`) querying.
+  3. **Lexical retrieval parity**: Whether Cognee provides genuine lexical/BM25 scoring or lacks it (evaluated against `MOD-10`'s configurable `LexicalBackendPort` candidates: **PG FTS** `tsvector`/`ts_rank_cd` vs. **Genuine BM25** `pg_search`).
+  4. **Filtering and authorization**: Whether metadata filters can push down securely AND return per-entity/edge **`source_memory_unit_ids[]`** for independent OpenFGA source checks inside `MOD-10`.
+  5. **Metadata and provenance**: Survival of `memory_unit_id`, `tenant_id`, `owner_principal`, `source_provenance`, and `trust_tier` across `CogneeAdapter` ingestion.
+  6. **Bitemporal retrieval**: Native support vs. missing bitemporal (**valid time** `valid_from`/`valid_to` + **system time** `recorded_from`/`recorded_to` + `superseded_by`) querying.
 - **Exit Criteria**: Verified Cognee 6-dimension capability matrix + storage backend footprint fed into `EVAL-05`, `EVAL-07`, and HLD.
 
 ### `EVAL-04` — LangGraph & Deterministic Task Manager Turn Handoff (`MOD-03`/`MOD-04`, `AP-03`)
@@ -78,10 +78,20 @@
 - **Role in Architecture**: Empirical validation of the configurable 5-stage Hybrid Retrieval Pipeline specified in [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md).
 - **Why Evaluation Is Required**: BM25, Reciprocal Rank Fusion (RRF), and configurable reranking are **proposed** architectural choices—not verified defaults—and we must avoid introducing a separate search engine (e.g., Elasticsearch/Meilisearch) unless PostgreSQL-native search fails to meet quality/latency targets (`AP-09`).
 - **Key Evaluation Questions**:
-  1. Can PostgreSQL native full-text search (`tsvector`/`ts_rank_cd`) or a PostgreSQL BM25 extension (`pg_search` / `pg_bm25`) satisfy keyword recall without a separate search container?
-  2. How do RRF parameters (`k`, branch weights) and replaceable rerankers (`NoOp` vs. Cross-Encoder vs. API reranker) perform across `Recall@K`, `Precision@K`, `MRR`, `NDCG@K`, end-to-end latency, and CPU/RAM overhead (`CON-15`)?
-  3. Do adversarial multi-user/household leakage tests verify $0.0\%$ unauthorized entity/edge/snippet leakage across all 4 branches?
-- **Exit Criteria**: Completed benchmark report across the evaluation test suite in [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md) §7 before locking final HLD/LLD retrieval configuration.
+  1. Separately benchmark **PostgreSQL native FTS** (`tsvector`/`ts_rank_cd` — never mislabeled BM25) vs. **Genuine BM25** (`pg_search` extension) to evaluate lexical recall/ranking without a separate search engine (`AP-09`).
+  2. Measure RRF (`k`, branch weights) and replaceable rerankers (`NoOp` vs. Cross-Encoder vs. API reranker) across `Recall@K`, `Precision@K`, `MRR`, `NDCG@K`, end-to-end latency, and CPU/RAM overhead (`CON-15`).
+  3. Verify bitemporal interval correctness (`CURRENT`, `HISTORICAL` returning superseded 2023 facts, `RANGE` overlap, and system-time `recorded_from`/`recorded_to` belief corrections), `memory_unit_id`-only deduplication (`content_hash` never merging distinct scopes), convergent entity source-level isolation (`"Project Apollo"`), and $0.0\%$ leakage (`MEM-EVAL-01`–`14`).
+- **Exit Criteria**: Completed benchmark report across [memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md) §6 before locking final HLD/LLD retrieval configuration.
+
+### `EVAL-08` — Autonomous Automation Platform, Non-LLM Condition Evaluation, Outbox & Loop Safety (`MOD-17`, `MOD-18`, `ADR-009`)
+- **Role in Architecture**: Framework-independent, Phabric-reusable Autonomous Automation Platform (`MOD-17`) and Result & Delivery Manager (`MOD-18`) supporting generalized `(tenant_id, owner_principal, creator_principal, typed execution_target)` ownership, immutable `PermissionEnvelope` bounds, 6 trigger types, non-LLM condition monitors, transactional `automation_outbox` dispatch, and cohesive 8-control loop protection.
+- **Why Evaluation Is Required**: Must validate transactional outbox dispatch/recovery/dead-letter handling, non-LLM condition predicate expressiveness (`OQ-16`), 3-point OpenFGA + `PermissionEnvelope` expansion rejection, indirect-loop circuit-breaker thresholds (`OQ-15`), single-VM headroom (`EVAL-05`), and clean packaging for future Phabric products (`OQ-17`).
+- **Key Evaluation Questions**:
+  1. Benchmark atomic `automation_outbox` PostgreSQL commit + leased dispatcher -> Redis transport, idempotent consumer dedup, `DEAD_LETTERED` handling, and stale-lease/misfire recovery with zero live LLM wait overhead.
+  2. Validate that deterministic `ConditionEvaluator` predicates over `MOD-08` `READ_ONLY` probes avoid unnecessary LLM invocations while respecting envelope frequency limits.
+  3. Verify `PermissionEnvelope` breach rejection (requiring renewed approval on scope/budget/frequency expansion), `SCRIPT` target lockout prior to `EVAL-06`, cycle/`max_trigger_depth`/circuit-breaker (`PAUSED_SAFETY_TRIP`) safety, and 3-point OpenFGA checks.
+  4. Confirm clean domain package boundaries (`AutomationPlatformPort` / `orbi_automation`) reusable outside Orbi without LangGraph imports.
+- **Exit Criteria**: Prototype trigger/condition evaluator benchmark + delegation cycle/leakage test report + quota/DSL defaults (`OQ-15`–`OQ-17`).
 
 ---
 
@@ -89,25 +99,27 @@
 
 | Phase | Milestone Focus | Included Capabilities & Modules | Exit Gate |
 | :--- | :--- | :--- | :--- |
-| **Phase 1** | **Core Spine, Authz & Action-Bound Approvals** | OCI Docker Compose spine (`orbi-postgres`, `orbi-redis`, `orbi-openfga`), `orbi-core` (Python 3.12+/FastAPI/LangGraph), `MOD-01` Telegram Adapter, `MOD-03` Task Manager, `MOD-04` Provider-Independent LLM Adapters + 7-step Tool Discovery, `MOD-05` Decision Service (Deterministic + LLM fallback), `MOD-06`/`MOD-07` Registries, `MOD-08` Tool Execution Gateway with canonical action-bound approvals (`ADR-004`), `MOD-15` Audit Ledger. | End-to-end governed task lifecycle with verified OpenFGA household-ready filtering, immutable approval invalidation on argument change, and Telegram approval resume. |
-| **Phase 2** | **Memory Manager, Hybrid Retrieval, SaaS APIs, Dashboard & Optional Jev** | `MOD-02` Web Dashboard (stack from `OQ-01`), `MOD-10` Memory Manager orchestrating 5-stage Hybrid Retrieval (Query Understanding, Vector/BM25/Graph/Temporal branches, Per-branch OpenFGA authz, RRF fusion, configurable reranking per `EVAL-03`/`EVAL-07`) over Cognee + PostgreSQL catalog, `MOD-12` SaaS API Connectors (Gmail, Spotify), optional Jev provider plugged into `MOD-05` (conditional on `EVAL-01` pass). | Gmail/Spotify tasks governed by action-bound approvals; hybrid memory passes `EVAL-07` quality/latency & $0\%$ leakage checks and is curable in Dashboard; `MOD-05` Jev fallback tested under simulated outage. |
-| **Phase 3** | **Isolated Cloud Browser & Layered Windows Companion** | `MOD-13` Isolated Playwright Container, `MOD-14` Local Windows Companion implementing Native API -> UIA (`agent-desktop`, `EVAL-02`) -> Controlled Vision Fallback with confidence halts, mTLS outbound tunnel, local guardrails & kill-switch. | Verified browser automation and cross-boundary Windows automation with safe confidence stops and action-bound HITL approvals across all interaction layers. |
-| **Phase 4** | **Markdown Skill Packages & Script Sandbox** | `MOD-11` Skill Lifecycle Manager (`SKILL.md` packages, schemas, examples, tests), `MOD-11-SANDBOX` (`EVAL-06`) isolated runner for supporting scripts, Dashboard skill review/approval UI, semantic version pinning & rollback. | Candidate Markdown skill packages evaluated in sandbox, explicitly approved by owner, published, and invoked via `MOD-08` without privilege escalation. |
-| **Phase 5** | **Home IoT & Multi-Member Household Expansion** | `MOD-16-EXT` Home Assistant / MQTT Bridge behind `MOD-07`/`MOD-08`/`MOD-09`, OpenFGA household member tuples activated in `MOD-01`/`MOD-02`, optional secondary user channels (`AP-10`). | Multi-member OpenFGA isolation verified + IoT actions governed by sensitivity tiers and approvals. |
+| **Phase 1** | **Core Spine, Authz, Approvals & Core Automation Dispatch** | OCI Docker Compose spine (`orbi-postgres`, `orbi-redis`, `orbi-openfga`), `orbi-core` (Python 3.12+/FastAPI/LangGraph), `MOD-01` Telegram Adapter, `MOD-03` Task Manager, `MOD-04` Provider-Independent LLM Adapters + 7-step Tool Discovery, `MOD-05` Decision Service (Deterministic + LLM fallback), `MOD-06`/`MOD-07` Registries, `MOD-08` Tool Execution Gateway with canonical action-bound approvals (`ADR-004`), `MOD-15` Audit Ledger, `MOD-18` Result & Delivery Manager, and `MOD-17` Autonomous Automation Platform foundation (`CRON`, `INTERVAL`, `ONE_TIME`, `MANUAL`, `schedule_followup` dispatching into `MOD-03` with 3-point OpenFGA checks). | End-to-end governed task lifecycle with verified OpenFGA household-ready filtering, immutable approval invalidation on argument change, Telegram approval resume, and durable non-LLM schedule/follow-up dispatch into `MOD-03`. |
+| **Phase 2** | **Memory, Full Autonomous Responsibilities, SaaS APIs, Dashboard & Optional Jev** | `MOD-02` Web Dashboard (stack from `OQ-01`), `MOD-10` Memory Manager 5-stage Hybrid Retrieval (`EVAL-03`/`EVAL-07`), `MOD-12` SaaS API Connectors (Gmail, Spotify), `MOD-17` full capabilities (`EVENT` subscriptions, LLM-free `CONDITION` monitors via `MOD-08` probes, ongoing `AgentResponsibility` work plans, non-inherited agent-to-agent delegation & cycle/budget guards), `MOD-18` completion callbacks, and optional Jev in `MOD-05` (`EVAL-01`). | Gmail/Spotify tasks governed by action-bound approvals; hybrid memory passes `EVAL-07` & $0\%$ leakage checks; agents create/adapt multi-schedule responsibilities and condition monitors without sleeping LLM sessions or privilege escalation. |
+| **Phase 3** | **Isolated Cloud Browser & Layered Windows Companion** | `MOD-13` Isolated Playwright Container, `MOD-14` Local Windows Companion implementing Native API -> UIA (`agent-desktop`, `EVAL-02`) -> Controlled Vision Fallback with confidence halts, mTLS outbound tunnel, local guardrails & kill-switch, plus `MOD-17` event/condition triggers over browser/desktop outcomes. | Verified browser automation and cross-boundary Windows automation with safe confidence stops, human takeover, and action-bound HITL approvals across all interaction layers. |
+| **Phase 4** | **Markdown Skill Packages & Script Sandbox** | `MOD-11` Skill Lifecycle Manager (`SKILL.md` packages in initial `MARKDOWN_ONLY` mode), `MOD-11-SANDBOX` (`EVAL-06`) isolated runner for future supporting scripts, Dashboard skill review/approval UI, semantic version pinning & rollback, plus `skill.published` event triggers in `MOD-17`. | Candidate Markdown skill packages evaluated cleanly, explicitly approved by owner, published, and invoked via `MOD-08` without privilege escalation. |
+| **Phase 5** | **Home IoT, Plant/Domain Sensors & Multi-Member Household** | `MOD-16-EXT` Home Assistant / MQTT / ESP32 Bridge behind `MOD-07`/`MOD-08`/`MOD-09`, OpenFGA household member tuples activated in `MOD-01`/`MOD-02`, IoT sensor event & condition monitor feeds into `MOD-17` (e.g., autonomous plant care & physical home actions under `ADR-004` approvals), optional secondary user channels (`AP-10`). | Multi-member OpenFGA isolation verified + IoT sensors drive ongoing `AgentResponsibility` condition monitors while physical actuators remain gated by sensitivity tiers and approvals. |
 
 ---
 
 ## 4. Scope Boundary Matrix (`[PROPOSED]`)
 
-| Capability | Phase 1 (Core) | Phase 2 (Memory & SaaS) | Phase 3 (Harnesses) | Phase 4 (Skills) | Phase 5 (IoT & Household) |
+| Capability | Phase 1 (Core) | Phase 2 (Memory, Full Auto & SaaS) | Phase 3 (Harnesses) | Phase 4 (Skills) | Phase 5 (IoT & Household) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | Python/FastAPI/LangGraph Core & Task Manager | **In Scope** | Enhanced | Enhanced | Enhanced | Enhanced |
-| Household-Ready OpenFGA Schema & 7-Step Discovery | **In Scope** (Owner Active) | Expanded | Expanded | Skill Scopes | **Household Active** |
+| Result & Delivery Manager (`MOD-18`) | **In Scope** | Full Callbacks | Enhanced | Enhanced | Household Routing |
+| Automation Platform (`MOD-17`: Cron/Interval/One-time/Follow-up) | **In Scope** *(Foundation)* | **Event, Condition & Responsibilities** | Cross-Harness | Skill Triggers | IoT Sensor Triggers |
+| Household-Ready OpenFGA Schema & 3-Point Automation Authz | **In Scope** (Owner Active) | Delegation Scopes | Expanded | Skill Scopes | **Household Active** |
 | Action-Bound Approval Digests & Invalidation | **In Scope** | Expanded | Cross-Boundary | Skill Approvals | IoT Approvals |
 | Provider-Independent LLM & Decision Service (Rules/LLM) | **In Scope** | Optional Jev (`EVAL-01`) | Tuned | Tuned | Tuned |
-| Web Dashboard (`MOD-02`, `OQ-01`) | — | **In Scope** | Trace/Sandbox Views | Skill Approval UI | Household/IoT UI |
+| Web Dashboard (`MOD-02`, `OQ-01`) | — | **In Scope** *(Incl. Responsibilities)* | Trace/Browser Views | Skill Approval UI | Household/IoT UI |
 | Memory Manager & Hybrid Retrieval Pipeline (`EVAL-03`, `EVAL-07`) | — | **In Scope** | Cross-Harness | Grounding | Context Awareness |
-| External SaaS APIs (Gmail, Spotify) | — | **In Scope** | Expanded | Skill-Composed | — |
+| External SaaS APIs (Gmail, Spotify) | — | **In Scope** | Event Feeds | Skill-Composed | — |
 | Playwright Cloud Browser Container (`MOD-13`) | — | — | **In Scope** | Evaluated | — |
 | Layered Windows Companion (`Native/UIA/Vision`, `EVAL-02`) | — | — | **In Scope** | Desktop Skills | — |
 | Markdown Skill Packages & Script Sandbox (`EVAL-06`) | — | — | — | **In Scope** | IoT Skills |

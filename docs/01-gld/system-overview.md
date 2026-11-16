@@ -1,11 +1,11 @@
 # Orbi — General Level Design (GLD): System Overview
 
 - **Document ID**: `DOC-GLD-001`
-- **Revision**: `1.2` *(Updated with Hybrid Memory Retrieval Architecture & CON-13–16)*
+- **Revision**: `1.3` *(Updated with Autonomous Automation Platform `MOD-17`, Result & Delivery `MOD-18` & `CON-23`–`26`)*
 - **Phase**: `01-GLD`
 - **Status**: `Draft - For Review`
 - **Last Updated**: `2026-11-16`
-- **Traceability**: Realizes Product Vision ([vision.md](file:///f:/Projects/Orbi/docs/00-product/vision.md)), Requirements ([requirements.md](file:///f:/Projects/Orbi/docs/00-product/requirements.md)), ADRs ([docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md)), and Memory HLD ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)).
+- **Traceability**: Realizes Product Vision ([vision.md](file:///f:/Projects/Orbi/docs/00-product/vision.md)), Requirements ([requirements.md](file:///f:/Projects/Orbi/docs/00-product/requirements.md)), ADRs ([docs/04-adr/](file:///f:/Projects/Orbi/docs/04-adr/README.md)), System HLD ([system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md)), and Memory HLD ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)).
 
 ---
 
@@ -39,10 +39,12 @@ flowchart TB
             MOD06["MOD-06: Central Agent Registry"]
             MOD07["MOD-07: Central Tool Registry"]
             MOD08["MOD-08: Tool Execution Gateway"]
-            MOD10["MOD-10: Memory Manager & Hybrid Retrieval Orchestrator"]
+            MOD10["MOD-10: Memory Manager"]
             MOD11["MOD-11: Skill Lifecycle Manager - SKILL.md"]
             MOD12["MOD-12: Stateless SaaS API Connectors"]
             MOD15["MOD-15: Audit & Provenance Service"]
+            MOD17["MOD-17: Autonomous Automation Platform - Phabric Port"]
+            MOD18["MOD-18: Result & Delivery Manager"]
         end
 
         subgraph ZONE2["Zone 2: Isolated Cloud Execution Environments & Backing Services"]
@@ -52,7 +54,7 @@ flowchart TB
             MOD11_SB["MOD-11-SANDBOX: Isolated Skill Script Sandbox - EVAL-06"]
             PG["orbi-postgres: App, OpenFGA & Memory Catalog / Search Eval"]
             REDIS["orbi-redis: Queues, Locks & Events"]
-            MEM_STORE["Cognee Adapter & Verified Backends - EVAL-03"]
+            MEM_STORE["Internal Replaceable CogneeAdapter Backends - EVAL-03"]
             EXT_JEV["Optional External Jev Provider - EVAL-01"]
             MOD16["MOD-16-EXT: Future Home Assistant / MQTT Boundary - AP-10"]
         end
@@ -92,6 +94,18 @@ flowchart TB
     MOD08 --> MOD13
     MOD08 --> MOD11_SB
     MOD08 -. "Future Home IoT" .-> MOD16
+    MOD08 --> MOD17
+    MOD17 -- "Read-Only Probes" --> MOD08
+    MOD17 -- "Dispatch Tasks" --> MOD03
+    MOD17 <--> PG
+    MOD17 <--> REDIS
+    MOD17 --> MOD09
+    MOD17 --> MOD15
+    MOD03 --> MOD18
+    MOD18 --> MOD17
+    MOD18 --> MOD01
+    MOD18 --> MOD02
+    MOD18 --> MOD15
 
     MOD09 <--> PG
     MOD10 <--> PG
@@ -112,9 +126,9 @@ flowchart TB
 
 | Execution Zone | Components | Process / Network / Credential Privilege | Prohibited Capabilities |
 | :--- | :--- | :--- | :--- |
-| **Zone 1: `orbi-core` (OCI API + Worker Containers)** | `MOD-01`, `MOD-03`, `MOD-04`, `MOD-05`, `MOD-06`, `MOD-07`, `MOD-08`, `MOD-10` (facade), `MOD-11` (manager), `MOD-12` (SaaS adapters), `MOD-15` | Controlled OCI Python runtime; holds DB/Redis connections and encrypted credential vault access **strictly inside `MOD-08`/`MOD-12`** boundaries (never exposed to `MOD-04` agent prompts/state). | Must never render untrusted web DOMs in-process, run unverified supporting scripts in-process, or directly touch Windows UIA/desktop APIs. |
+| **Zone 1: `orbi-core` (OCI API + Worker Containers)** | `MOD-01`, `MOD-03`, `MOD-04`, `MOD-05`, `MOD-06`, `MOD-07`, `MOD-08`, `MOD-10` (Memory Manager), `MOD-11` (manager), `MOD-12` (SaaS adapters), `MOD-15`, `MOD-17` (Automation Platform), `MOD-18` (Result & Delivery) | Controlled OCI Python runtime; holds DB/Redis connections and encrypted credential vault access **strictly inside `MOD-08`/`MOD-12`** boundaries (never exposed to `MOD-04` agent prompts/state). | Must never render untrusted web DOMs in-process, run unverified supporting scripts in-process, or directly touch Windows UIA/desktop APIs. |
 | **Zone 2a: Isolated Cloud Execution Sandboxes** | `MOD-13` (Playwright Browser), `MOD-11-SANDBOX` (Skill Supporting Script Runner) | Dedicated ephemeral/capped containers or micro-sandboxes (`EVAL-06`); zero access to `orbi_app` DB, Redis, OpenFGA admin APIs, or OAuth secrets; strict egress controls (`MOD-13` domain allowlist; `MOD-11-SANDBOX` no ambient network/host FS). | Must never call external SaaS with host credentials, mutate DB tables directly, or bypass `MOD-08`. |
-| **Zone 2b: Dedicated Cloud Backing Services** | `MOD-02` (Dashboard UI), `MOD-09` (OpenFGA), `orbi-postgres`, `orbi-redis`, `Cognee Storage Backends` (`EVAL-03`) | Separate Docker Compose services on internal OCI Docker network; no public exposure except TLS reverse proxy for `MOD-01`/`MOD-02`/`MOD-08` mTLS relay. | Never invoke LLM loops or execute user-facing tools. |
+| **Zone 2b: Dedicated Cloud Backing Services** | `MOD-02` (Dashboard UI), `MOD-09` (OpenFGA), `orbi-postgres`, `orbi-redis`, `Internal CogneeAdapter Storage Backends` (`EVAL-03`) | Separate Docker Compose services on internal OCI Docker network; no public exposure except TLS reverse proxy for `MOD-01`/`MOD-02`/`MOD-08` mTLS relay. | Never invoke LLM loops or execute user-facing tools. |
 | **Zone 3: Local Windows Companion (Off-Cloud)** | `MOD-14` (`Native API` -> `agent-desktop` UIA -> `Controlled Vision Fallback`) | Runs on user's Windows PC under local user session; initiates **outbound-only** mTLS tunnel (`ASM-05`); enforces local app allow/deny lists, PII redaction, and local hardware/tray kill-switch. | Must never listen on public inbound sockets, bypass cloud OpenFGA/approvals, or hold cloud OAuth secrets (`AP-05`). |
 
 ---
@@ -152,7 +166,7 @@ At resume/execution time, `MOD-08` recomputes this binding. **Any change** to ar
 - **`MOD-03` vs. `MOD-04`**: `MOD-03` (PostgreSQL + Redis) owns task lifecycle, retries, budgets, and action-bound approvals; LangGraph (`MOD-04`) owns only ephemeral turn-scoped reasoning state.
 - **App State vs. Memory vs. Skills (`AP-04`)**:
   - **PostgreSQL (`orbi_app`)**: Authoritative operational state, registries, approval bindings, audit ledger.
-  - **Memory Manager (`MOD-10` over Cognee + Memory Catalog, `ADR-007`, `ADR-008`)**: Owns and orchestrates the 5-stage hybrid memory retrieval pipeline (`Query Understanding -> Parallel Branches -> Per-Branch OpenFGA Authz -> Candidate Fusion -> Reranking`), keeping Cognee abstracted behind an internal adapter; actual Cognee storage backends and PostgreSQL FTS/BM25 fit verified in `EVAL-03`/`EVAL-07`.
+  - **`MOD-10: Memory Manager` (`ADR-007`, `ADR-008`)**: Canonical owner of memory lifecycle, provenance/quarantine, bi-temporal validity (`orbi_memory`), mandatory per-branch pre-fusion OpenFGA authorization, and the 5-stage hybrid memory retrieval pipeline (`Query Understanding -> Parallel Branches -> Per-Branch OpenFGA Authz -> Candidate Fusion -> Reranking`), treating **Cognee** strictly as an internal, replaceable adapter (`CogneeAdapter`, not `MOD-10` itself); actual Cognee storage backends and PostgreSQL FTS/BM25 fit verified in `EVAL-03`/`EVAL-07`.
   - **Skill Lifecycle Manager (`MOD-11`, `ADR-005`)**: Versioned **Markdown-based skill packages (`SKILL.md`)** distinguishing declarative planning instructions from optional sandboxed supporting scripts (`MOD-11-SANDBOX`), evaluated and human-approved prior to production publication.
 
 ### 3.6 Layered Windows Companion Execution (`Decision 9`, `ADR-006`)
@@ -164,15 +178,21 @@ At resume/execution time, `MOD-08` recomputes this binding. **Any change** to ar
 Across **all three layers**, `MOD-14` must stop safely (`STOP_INSUFFICIENT_CONFIDENCE`) when confidence is insufficient, enforce local app/window policies, and obey cloud OpenFGA + action-bound approvals for sensitive actions.
 
 ### 3.7 Hybrid Memory Retrieval & Pre-Fusion Authorization Invariant (`ADR-008`)
-`[CONFIRMED]` / `[PROPOSED]` `MOD-10` (**Memory Manager**) is **not** a thin wrapper over Cognee's default retrieval API; it owns and orchestrates a 5-stage configurable retrieval pipeline ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)):
-1. **Provider-Independent Query Understanding**: Extracts intent, entities, exact keywords, temporal constraints, and graph applicability to activate only relevant branches without mandatory LLM calls for simple queries.
-2. **Parallel Multi-Strategy Retrieval**: Runs configured branches (`Vector semantic`, `BM25 keyword` `[PROPOSED]`, `Knowledge Graph`, and selective `Temporal`). PostgreSQL-native search is evaluated (`EVAL-07`) before introducing any additional search engine (`AP-09`).
-3. **Mandatory Per-Branch Pre-Fusion OpenFGA Enforcement**: Every retrieval branch enforces resource-level OpenFGA authorization (`private_user`, `shared_household`, custom scopes) **before** candidates enter fusion, reranking, or LLM context. Discovery of an entity never implies read permission.
-4. **Configurable Candidate Fusion & Reranking (`[PROPOSED]` / `[EVALUATION REQUIRED]`)**: Deduplicates and merges incompatible branch scales via Reciprocal Rank Fusion (`RRF`), then optionally reorders top candidates via a replaceable, non-LLM-mandatory reranker while preserving full branch provenance.
+`[CONFIRMED]` / `[PROPOSED]` **`MOD-10: Memory Manager`** is the canonical memory module—**not** Cognee itself or a thin wrapper over Cognee's default retrieval API; it owns memory lifecycle, provenance, **true bitemporal validity** (`valid_from`/`valid_to` + `recorded_from`/`recorded_to` + `superseded_by`), transactional outbox sync (`memory_sync_outbox`), source-level authorization enforcement, and a 5-stage configurable retrieval pipeline ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md)), while treating Cognee as an internal, replaceable adapter (`CogneeAdapter`):
+1. **Provider-Independent Query Understanding**: Extracts intent, entities, exact keywords, bitemporal mode (`CURRENT` / `HISTORICAL` / `RANGE` + optional `as_of_recorded_ts`), and graph applicability to activate only relevant branches without mandatory LLM calls for simple queries.
+2. **Parallel Multi-Strategy Retrieval**: Runs configured branches (`Vector semantic`, configurable lexical `BM25Branch` separately evaluating **PG FTS** `tsvector`/`ts_rank_cd` vs. **Genuine BM25** `pg_search` `[PROPOSED]`, `Knowledge Graph` with `source_memory_unit_ids[]`, and selective `Bitemporal` interval queries without global `superseded_by IS NULL`).
+3. **Mandatory Per-Branch & Per-Source Pre-Fusion OpenFGA Enforcement**: Every retrieval branch enforces OpenFGA authorization (`private_user`, `shared_tenant`, `custom_acl`) and checks every source `MemoryUnit` contributing to convergent graph entities/paths with zero permission unioning **before** candidates enter fusion, reranking, or LLM context.
+4. **Configurable Candidate Fusion & Reranking (`[PROPOSED]` / `[EVALUATION REQUIRED]`)**: Deduplicates **strictly by `memory_unit_id`** (`content_hash` never merges records) and reconciles incomparable branch scales via rank fusion (`RRF` initial proposal), then optionally reorders via a replaceable, non-LLM-mandatory reranker while preserving full provenance.
+
+### 3.8 Autonomous Agent-Driven Automation, Generalized Ownership, Permission Envelopes & Outbox (`ADR-009`)
+`[CONFIRMED]` Automation is a first-class capability exposed to authorized agents—not merely user-submitted cron strings:
+1. **Five-Way Separation**: `MOD-04` reasons and plans future/adaptive work; `MOD-17` persists `AgentResponsibility` work plans, `PermissionEnvelope` constraints, 6 trigger types (`CRON`, `INTERVAL`, `ONE_TIME`, `EVENT`, `CONDITION`, `MANUAL`), schedule versions, atomic `automation_outbox` rows, and runs LLM-free condition monitors; `MOD-03` remains the sole task execution engine; `MOD-08` mediates all `automation.*` calls and condition probes; `MOD-18` formats/routes notifications and completion callbacks.
+2. **Generalized Tenant/Principal Ownership & Typed Execution Targets**: Separates `tenant_id` (`PERSONAL | HOUSEHOLD | ORGANIZATION_FUTURE`), `owner_principal`, `creator_principal`, and typed `execution_target` (`AGENT` active; `WORKFLOW` allowed only when deterministically defined; `SCRIPT` disabled until `EVAL-06`).
+3. **Permission Envelopes, Zero Inheritance & Transactional Reliability**: Enforces immutable `PermissionEnvelope` bounds requiring renewed approval for any scope/frequency/budget/tool expansion; guarantees zero creator inheritance via 3-point OpenFGA checks; enforces cohesive 8-control loop protection (`PAUSED_SAFETY_TRIP`); and treats PostgreSQL outboxes (`automation_outbox`, `memory_sync_outbox`) as authoritative over Redis transport.
 
 ---
 
-## 4. Architectural Conflicts & Tensions Register (`CON-01` – `CON-22`)
+## 4. Architectural Conflicts & Tensions Register (`CON-01` – `CON-26`)
 
 ### Previously Identified Conflicts (`CON-01` – `CON-07`, Updated)
 
@@ -200,10 +220,10 @@ Across **all three layers**, `MOD-14` must stop safely (`STOP_INSUFFICIENT_CONFI
 
 | ID | Newly Identified Conflict | Analysis & Proposed Mitigation |
 | :--- | :--- | :--- |
-| **`CON-13`** | **Multi-Hop Graph Traversal vs. Per-Branch Pre-Fusion OpenFGA Enforcement (`FR-MS-12`)** | Knowledge graph retrieval frequently walks intermediate entities and edges (e.g., `User A -> Shared Household -> Private Event B`). If graph queries traverse or return unauthorized intermediate/terminal nodes or relationship labels prior to authorization filtering, private data leaks into fusion or prompt context. **Mitigation (`ADR-008`)**: Enforce strict OpenFGA resource checks on **every** returned node, edge, and triplet inside `GraphBranch` *before* results exit the branch; disallow unverified multi-hop path projections across unauthorized nodes. |
-| **`CON-14`** | **Dual-Store Consistency (PostgreSQL Memory Catalog vs. Cognee Vector/Graph Stores)** | Because Cognee may not natively supply BM25 or bi-temporal validity filtering (`EVAL-03`), `MOD-10` maintains an authoritative `MemoryUnit` catalog/index in PostgreSQL (`orbi_memory`) alongside Cognee's vector/graph indexes. Partial write failures or deletes can leave orphaned vectors/edges or stale ACL tuples. **Mitigation ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md))**: PostgreSQL `orbi_memory` is the canonical source of truth for identity, ACL scope, and temporal validity; outbox/reconciliation jobs synchronize Cognee ingestions/deletions, and every retrieval branch validates canonical `memory_unit_id` existence and OpenFGA permission at read time. |
+| **`CON-13`** | **Multi-Hop & Convergent Entity Graph Traversal vs. Source-Level OpenFGA Authz (`FR-MS-12`)** | A knowledge graph entity (e.g., `"Project Apollo"`) or multi-hop edge may combine private and shared `MemoryUnit` sources. Returning merged descriptions, paths, or labels leaks private source details even if one source is shared. **Mitigation (`ADR-008`, `DOC-HLD-001`)**: Preserve `source_memory_unit_ids[]` on every entity/edge/attribute, authorize each contributing source independently (zero permission unioning), restrict entity views solely to authorized sources, drop paths with any unauthorized hop source, and fail closed if provenance is missing. |
+| **`CON-14`** | **Dual-Store Consistency (PostgreSQL `orbi_memory` Catalog vs. Replaceable `CogneeAdapter`)** | Keeping PostgreSQL's canonical `orbi_memory` catalog (for bitemporal intervals, lexical search, and ACLs) aligned with `CogneeAdapter` vector/graph indexes risks split-brain drift if Redis/async calls fail. **Mitigation ([memory-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/memory-architecture.md))**: PostgreSQL `orbi_memory` is authoritative; mutations write atomically to **`memory_sync_outbox`**, a leased dispatcher publishes via Redis with bounded retries, idempotent consumers deduplicate `event_id`, poison rows enter `DEAD_LETTERED`, and stale leases recover on restart. |
 | **`CON-15`** | **Parallel 4-Branch Retrieval & Cross-Encoder Reranking Compute vs. Single OCI VM Limits (`AP-09`, `EVAL-05`)** | Executing up to four parallel retrieval branches plus loading a local neural cross-encoder reranker inside `orbi-core` competes for RAM/CPU on a single OCI VM alongside Playwright, OpenFGA, and PostgreSQL. **Mitigation (`EVAL-07`, `OQ-13`)**: Keep `QueryUnderstanding` selective (avoiding unnecessary temporal/graph runs), support `NoOpReranker` / external API reranker / lightweight local reranker behind `RerankerPort`, and benchmark CPU/RAM overhead in `EVAL-05` and `EVAL-07`. |
-| **`CON-16`** | **Bi-Temporal Fact Supersession vs. Untrusted Source Overwrites (`CON-07`, `OQ-14`)** | Temporal retrieval tracks changing facts over time (`valid_from`, `valid_to`, `superseded_by`), yet untrusted external sources (e.g., an incoming promotional/phishing email) must not automatically invalidate or supersede high-trust user memories. **Mitigation (`ADR-008`)**: Separate trust tier from temporal validity—only `user_explicit` or owner-curated updates may close `valid_to` (`superseded_by`) on existing high-trust memories; `untrusted_external` temporal assertions remain quarantined/scoped unless verified. |
+| **`CON-16`** | **Bitemporal Fact Succession/Correction vs. Untrusted Source Overwrites (`CON-07`, `OQ-14`)** | Valid-time real-world succession (`valid_from`/`valid_to`) and system-time belief corrections (`recorded_from`/`recorded_to`) must both stay queryable (`CURRENT`/`HISTORICAL`/`RANGE`) without letting `untrusted_external` emails overwrite high-trust user records. **Mitigation (`ADR-008`, `DOC-HLD-001`)**: Explicit user corrections close `recorded_to` + set `superseded_by` while preserving prior system-time beliefs; historical queries do not universally filter `superseded_by IS NULL`; `untrusted_external` records stay quarantined until owner review. |
 
 ### Reconciled Cross-Document HLD Conflicts (`CON-17` – `CON-22`, See [system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md))
 
@@ -215,3 +235,12 @@ Across **all three layers**, `MOD-14` must stop safely (`STOP_INSUFFICIENT_CONFI
 | **`CON-20`** | **Playwright Human Takeover (`MOD-13` OTP/CAPTCHA) vs. `AP-05`/`AP-06` Isolation & Approval Integrity** | Allowing manual user takeover over a cloud browser session risks exposing persistent cookies/sessions or unverified actions. **Reconciliation**: Orbi never automates CAPTCHA bypassing; `MOD-13` suspends cleanly via `MOD-03` (`AWAITING_HUMAN_TAKEOVER`), exposes an OpenFGA-gated ephemeral noVNC/OTP channel inside `MOD-02`, and enforces fresh action-bound approvals (`ADR-004`) on sensitive DOM submits. |
 | **`CON-21`** | **Four-Plane HLD Logical Grouping vs. Three-Zone Physical Isolation (`ADR-001`)** | Grouping modules into 4 HLD planes (*Control*, *Trusted Data & Policy*, *Isolated Execution*, *Local Execution*) could appear inconsistent with the 3 physical isolation zones if unmapped. **Reconciliation**: [system-architecture.md](file:///f:/Projects/Orbi/docs/02-hld/system-architecture.md) §A.2 maps every module 1-to-1 across both views without altering ownership. |
 | **`CON-22`** | **Object/Artifact Storage (`MOD-10`/`11`/`13`) vs. `AP-09` Minimal Infrastructure** | Playwright traces, ingested documents, and versioned skill artifacts require blob storage, but adding MinIO/S3 containers violates `AP-09` on a single OCI VM. **Reconciliation**: Abstract behind `BlobStoragePort` using an encrypted local OCI Docker volume initially, with optional OCI Object Storage bucket migration later. |
+
+### Newly Identified Conflicts from Autonomous Automation Architecture (`CON-23` – `CON-26`)
+
+| ID | Discovered Conflict / Tension | Analysis & Mitigation Strategy |
+| :--- | :--- | :--- |
+| **`CON-23`** | **Autonomous Self-Scheduling & Indirect Event Loops vs. Budget Exhaustion & Explosions (`AP-09`, `EVAL-08`)** | Allowing agents to autonomously create schedules, event hooks, condition monitors, and follow-ups can trigger indirect trigger storms or infinite chains (`A -> B -> C -> A`). **Mitigation (`ADR-009`, `OQ-15`)**: Enforce a cohesive 8-control pipeline—propagated `correlation_id` + `trigger_chain_ids[]` + `trigger_depth`, `event_id` deduplication, cycle & depth rejection, `min_interval_seconds` & cooldowns, envelope quotas, bounded non-cascading retries, sliding-window indirect-loop circuit breaker, and deterministic `PAUSED_SAFETY_TRIP` termination + `MOD-18` alert. |
+| **`CON-24`** | **LLM-Free Condition Evaluation (`FR-AT-03`) vs. Gateway Exclusivity (`AP-01`)** | Running deterministic condition monitors without waking an LLM avoids token burn, yet letting `MOD-17` call external sensors/SaaS endpoints directly would bypass `MOD-08` secret injection, Stage-2 OpenFGA checks, and auditing. **Mitigation**: `MOD-17`'s `ConditionEvaluator` executes probes strictly as `READ_ONLY` tools via `MOD-08` (`execute_readonly_probe()`), evaluating the deterministic predicate (`OQ-16`) internally before optionally waking a target agent via `MOD-03`. |
+| **`CON-25`** | **Delegation, Self-Modification & Target Diversity vs. Permission Escalation (`AP-02`, `FR-AT-05`/`06`)** | An agent or workflow creating/adapting automations across generalized tenants/targets risks privilege creep across iterations or via creator inheritance. **Mitigation (`ADR-009`)**: Separate `tenant_id`, `owner_principal`, `creator_principal`, and typed `execution_target` (`AGENT` active; `WORKFLOW` only if registered; `SCRIPT` disabled until `EVAL-06`); bind an immutable **`PermissionEnvelope`** blocking self-expansion without renewed authorization; enforce zero creator inheritance and 3-point OpenFGA checks. |
+| **`CON-26`** | **Phabric Cross-Product Reusability vs. Orbi Modular Monolith Coupling (`AP-08`, `AP-09`)** | Making `MOD-17` reusable across future Phabric products while hosting it inside `orbi-core` creates risk of importing Orbi-specific LangGraph/Telegram types or prematurely spinning out a microservice. **Mitigation (`OQ-17`)**: Package the Automation Platform domain core behind clean `Protocol` ports (`TaskDispatchPort`, `ProbePort`, `AuthzPort`, `AuditPort`, `DeliveryPort`) and dedicated schema (`orbi_automation`), with zero dependencies on LangGraph or Orbi channels. |
