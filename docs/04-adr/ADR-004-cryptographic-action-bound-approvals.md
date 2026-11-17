@@ -14,17 +14,20 @@ When Orbi pauses a task for human-in-the-loop (HITL) approval of a sensitive or 
 
 ## Decision
 
-1. **Exact Immutable Binding Tuple**: Every `ApprovalRequest` persisted by `MOD-03` (Task Manager) and verified by `MOD-08` (Tool Execution Gateway) must bind cryptographically (`SHA-256` canonical JSON digest) to:
+1. **Exact Immutable Binding Tuple & Centralized `HumanInteractionManager` (`MOD-03`)**: Every `APPROVAL_REQUEST` is managed through `MOD-03`'s centralized `HumanInteractionManager` (`orbi_app.interaction_requests` linked 1-to-1 with `orbi_app.approval_requests`, pausing tasks as `WAITING_FOR_USER` rather than keeping workers alive) and verified by `MOD-08` (Tool Execution Gateway). Each `ApprovalRequest` must bind cryptographically (`SHA-256` canonical JSON digest + HMAC) to:
    - `user_id` (authenticated approver authorized under OpenFGA)
-   - `task_id`
+   - `task_id` & `execution_id` *(including `automation_generation` when automation-triggered)*
    - `tool_id` & `tool_version`
    - `canonical_arguments_hash` (deterministic canonical serialization of semantic tool arguments)
    - `target_resource` (canonical resource identifier)
    - `policy_version` (OpenFGA model/policy revision at request time)
    - `expires_at` (UTC expiration timestamp)
-2. **Strict Invalidation on Mutation (`Clarification C`)**:
-   - Before executing a previously approved `ToolCallIntent`, `MOD-08` recomputes the binding digest and verifies expiration and `policy_version`.
-   - **Any change** to the tool, tool version, canonical arguments, target resource, approving user, or OpenFGA `policy_version`—or passage of `expires_at`—automatically **invalidates** the approval (`APPROVAL_INVALIDATED_MUTATION`), aborts execution, records the event in `MOD-15`, and triggers a fresh approval request.
+2. **Strict Separation of Interaction Types, Authorization Non-Invalidation & Validation Outcomes (`Clarification C`)**:
+   - **Type Isolation**: Ordinary `INFORMATION_REQUEST` answers, `PHYSICAL_ACTION_REQUEST` confirmations, `SECURE_INPUT_REQUEST` secret entries (which bypass LLM context, checkpoints, memory, and logs), and `HUMAN_TAKEOVER` handoffs **never implicitly count as an `APPROVAL_REQUEST`**.
+   - **Pre-Mutation OpenFGA Gate vs. Explicit Denial vs. Invalidation**:
+     - **(A) Unauthorized Responder**: Checked via `MOD-09` OpenFGA **before** any mutation to `interaction_requests` or `approval_requests`. Denied attempts return `403 AUTHZ_DENIED`, write an immutable `UNAUTHORIZED_INTERACTION_ATTEMPT` security audit in `MOD-15`, and leave the legitimate user's pending interaction (`PENDING_USER`, `interaction_version`) and approval (`PENDING`) completely intact.
+     - **(B) Authorized Explicit Denial (`REJECTED`)**: Only an OpenFGA-authorized approver explicitly denying the action transitions `approval_requests` and `interaction_requests` to `REJECTED` (and cancels the waiting task), preventing execution.
+     - **(C) Digest, Target, or Policy Mismatch (`INVALIDATED`)**: Before executing a previously approved `ToolCallIntent`, `MOD-08` Gate 5 revalidates live task/cancellation state, active `automation.generation` (if automation-triggered), live OpenFGA `policy_version`, `now < expires_at`, binding digest + HMAC equality, and executes single-use `APPROVED -> CONSUMED` CAS. **Any change** to the tool, tool version, canonical arguments, target resource, approving user, task/automation cancellation state, or OpenFGA `policy_version`—or passage of `expires_at`—automatically transitions `approval_requests` and linked `interaction_requests` to **`INVALIDATED`** (`APPROVAL_INVALIDATED_MUTATION`), aborts execution, records the exact invalidation reason in `MOD-15`, and triggers a fresh approval request if still permitted.
 3. **Volatile Session Token Separation (`CON-10`)**:
    - Ephemeral non-semantic execution tokens (such as refreshed Playwright/Windows `snapshot_id` epochs) must be declared explicitly outside semantic action arguments in `MOD-07` schemas and validated separately via UI/state freshness guards (`CON-05`) rather than allowing silent semantic argument drift.
 
