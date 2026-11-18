@@ -1,0 +1,39 @@
+{
+  "measured_at_utc": "2026-11-18T14:53:44.226440+00:00",
+  "database_dsn": "postgresql://orbi:***@127.0.0.1:54328/orbi_eval04",
+  "iterations": 10,
+  "metrics": {
+    "simple_task_and_checkpoint_ms": {
+      "n": 10,
+      "min_ms": 212.294,
+      "p50_ms": 221.175,
+      "mean_ms": 228.324,
+      "p95_ms": 258.979,
+      "max_ms": 258.979
+    },
+    "suspension_phase_abc_ms": {
+      "n": 10,
+      "min_ms": 154.313,
+      "p50_ms": 171.708,
+      "mean_ms": 181.845,
+      "p95_ms": 233.113,
+      "max_ms": 233.113
+    },
+    "resumption_phase_d_and_worker2_ms": {
+      "n": 10,
+      "min_ms": 242.339,
+      "p50_ms": 254.586,
+      "mean_ms": 265.528,
+      "p95_ms": 300.431,
+      "max_ms": 300.431
+    },
+    "crash_reconciler_roll_forward_ms": {
+      "n": 10,
+      "min_ms": 75.428,
+      "p50_ms": 91.769,
+      "mean_ms": 91.577,
+      "p95_ms": 119.755,
+      "max_ms": 119.755
+    }
+  }
+}

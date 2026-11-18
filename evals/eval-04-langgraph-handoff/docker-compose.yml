@@ -1,0 +1,20 @@
+services:
+  orbi-eval04-postgres:
+    image: postgres:16-alpine
+    container_name: orbi-eval04-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-orbi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orbi_eval04_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-orbi_eval04}
+    ports:
+      - "54328:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbi -d orbi_eval04"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - eval04_pgdata:/var/lib/postgresql/data
+
+volumes:
+  eval04_pgdata:

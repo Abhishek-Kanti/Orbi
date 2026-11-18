@@ -1,6 +1,6 @@
 # ADR-004: Cryptographic Action-Bound Approval Integrity
 
-- **Status**: Accepted *(State Handoff Validated in `EVAL-04`; Concrete Tier Matrix & TTLs Open under `OQ-08`)*
+- **Status**: Accepted *(Core PG + LangGraph Handoff `CONDITIONAL PASS` in `EVAL-04` on `2026-11-18`; Concrete Tier Matrix & TTLs Open under `OQ-08`; Live OpenFGA/Redis/SecureInput/Takeover Integration Pending Phases 1–3)*
 - **Date**: `2026-11-14`
 - **Drivers**: Decision 8, Clarification C, Principles `AP-03`, `AP-06`, `AP-07`
 
@@ -16,7 +16,7 @@ When Orbi pauses a task for human-in-the-loop (HITL) approval of a sensitive or 
 
 1. **Exact Immutable Binding Tuple & Centralized `HumanInteractionManager` (`MOD-03`)**: Every `APPROVAL_REQUEST` is managed through `MOD-03`'s centralized `HumanInteractionManager` (`orbi_app.interaction_requests` linked 1-to-1 with `orbi_app.approval_requests`, pausing tasks as `WAITING_FOR_USER` rather than keeping workers alive) and verified by `MOD-08` (Tool Execution Gateway). Each `ApprovalRequest` must bind cryptographically (`SHA-256` canonical JSON digest + HMAC) to:
    - `user_id` (authenticated approver authorized under OpenFGA)
-   - `task_id` & `execution_id` *(stable logical execution identity invariant across worker crashes, `W1 -> W2` lease replacement, checkpoint pause/restoration, and retries—distinct from per-attempt `claim_epoch` or `attempt_count`; includes `automation_generation` when automation-triggered)*
+   - `task_id` & `execution_id` *(stable logical execution identity invariant across worker crashes, `W1 -> W2` lease replacement, checkpoint pause/restoration, and retries—distinct from per-attempt `claim_epoch` or `attempt_count`; includes `automation_generation` when automation-triggered; **`approval_id` MUST also persist in checkpointed step state or resolve from `step_execution_receipts` across secondary interruptions such as `APPROVAL_REQUEST` -> `UNCERTAIN_EXECUTION_RECONCILIATION` per `EVAL-04` Finding 4**)*
    - `tool_id` & `tool_version`
    - `canonical_arguments_hash` (deterministic canonical serialization of semantic tool arguments)
    - `target_resource` (canonical resource identifier)

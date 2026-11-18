@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbi-eval04-handoff"
+version = "0.1.0"
+description = "Orbi EVAL-04: LangGraph + MOD-03 Task Handoff, PostgreSQL Lifecycle & Crash Recovery Prototype"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2.50",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "psycopg[binary,pool]>=3.2.0",
+    "jsonschema>=4.23.0",
+    "pytest>=8.3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
