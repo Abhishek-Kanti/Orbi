@@ -16,7 +16,7 @@ When Orbi pauses a task for human-in-the-loop (HITL) approval of a sensitive or 
 
 1. **Exact Immutable Binding Tuple & Centralized `HumanInteractionManager` (`MOD-03`)**: Every `APPROVAL_REQUEST` is managed through `MOD-03`'s centralized `HumanInteractionManager` (`orbi_app.interaction_requests` linked 1-to-1 with `orbi_app.approval_requests`, pausing tasks as `WAITING_FOR_USER` rather than keeping workers alive) and verified by `MOD-08` (Tool Execution Gateway). Each `ApprovalRequest` must bind cryptographically (`SHA-256` canonical JSON digest + HMAC) to:
    - `user_id` (authenticated approver authorized under OpenFGA)
-   - `task_id` & `execution_id` *(including `automation_generation` when automation-triggered)*
+   - `task_id` & `execution_id` *(stable logical execution identity invariant across worker crashes, `W1 -> W2` lease replacement, checkpoint pause/restoration, and retries—distinct from per-attempt `claim_epoch` or `attempt_count`; includes `automation_generation` when automation-triggered)*
    - `tool_id` & `tool_version`
    - `canonical_arguments_hash` (deterministic canonical serialization of semantic tool arguments)
    - `target_resource` (canonical resource identifier)
